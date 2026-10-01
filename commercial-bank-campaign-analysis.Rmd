@@ -1,0 +1,687 @@
+---
+title: "Commercial Bank Campaign Analysis"
+author: "Aullya Nadine Kuswandi"
+date: "2025-06-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.width = 7,
+                      fig.height = 5, 
+                      dev = "png")
+
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(knitr)
+```
+
+# Project Overview
+This project explores a Commercial Bank’s recent marketing campaign dataset with the goal of evaluating the campaign’s performance and providing actionable recommendations for future campaigns. The analysis involves identifying and handling data quality issues, examining key patterns and relationships within the data, and interpreting client behaviors. The project concludes with interactive visualizations designed to effectively communicate insights and support data-driven decision-making.<br>
+
+### Presentation Video
+[Presentation Video](https://youtu.be/5W5bLleeoCI)
+
+# {.tabset}
+## Data Quality Assessment and Preprocessing 
+### Data Dimension
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Import dataset
+df = read.csv("data_B.csv")
+
+cat("Dimension of dataset:\n",
+    "Row: ", dim(df)[1], "\n",
+    "Column: ", dim(df)[2])
+```
+
+
+### A. Identify Data Quality Issues
+**a. Missing value**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Check missing values
+cat("Number of missing values in every column:")
+colSums(is.na(df))
+```
+There is 9 missing values in duration.<br><br>
+
+**b. Duplicated Records**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Check duplicate records
+df1 = df
+
+# We check duplicated without column X, which is index column to make sure the records are distinct.
+df1 = df1[,-c(1)]
+
+dup = sum(duplicated(df1))
+cat("Number of duplicated: ", dup)
+```
+There is no duplicated records in this dataset. <br><br>
+
+**c. Inconsistent Format or Unknown Categories**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Check inconsistent or unknown categories
+
+# str(df) -> bisa digunakan untuk melihat tipe data, namun kurang rapi jika ingin ditampilkan ke report
+
+dtypes <- data.frame(
+  Type = sapply(df, class)
+)
+
+# Tampilkan dalam bentuk tabel HTML
+kable(dtypes, caption = "Data Type for Every Variable")
+
+```
+All data types is matched with each variable description. But for data type character, it is better to change it to factor data type because factors are more efficient for handling categorical data. <br><br>
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Check inconsistent or unknown categories
+out_cat <- c(
+  "=== Job ===",
+  capture.output(table(df$job)),
+  "",
+  "=== Marital ===",
+  capture.output(table(df$marital)),
+  "",
+  "=== Education ===",
+  capture.output(table(df$education)),
+  "",
+  "=== Default ===",
+  capture.output(table(df$default)),
+  "",
+  "=== Housing ===",
+  capture.output(table(df$housing)),
+  "",
+  "=== Loan ===",
+  capture.output(table(df$loan)),
+  "",
+  "=== Contact ===",
+  capture.output(table(df$contact)),
+  "",
+  "=== Month ===",
+  capture.output(table(df$month)),
+  "",
+  "=== Day of Week ===",
+  capture.output(table(df$day_of_week)),
+  "",
+  "=== Poutcome ===",
+  capture.output(table(df$poutcome)),
+  "",
+  "=== Term Deposit (y) ===",
+  capture.output(table(df$y))
+)
+
+cat(paste(out_cat, collapse = "\n"))
+
+```
+In job variable, there are 9 records that contain only a blank space (" ") instead of an actual job title. These blank entries do not provide any meaningful information and should be treated as missing values.  
+<br>
+Some categorical variables have entries labeled as "unknown", such as job, marital, education, default, housing, and loan. In the dataset overview, it is stated that the default variable has three categories, including "unknown", so the presence of "unknown" in this case is expected. However, in the dataset as a whole, "unknown" appears across multiple categorical variables and may result from various causes, such as missing responses, data entry issues, or intentionally undisclosed information from the respondents.<br><br>
+
+
+**d. Outliers or Extreme Values ** 
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Check outliers or extreme values
+num_var <- df[, sapply(df, is.numeric) & names(df) != "X"]
+
+outlier_summary <- sapply(num_var, function(x) {
+  Q1 = quantile(x, 0.25, na.rm = TRUE)
+  Q3 = quantile(x, 0.75, na.rm = TRUE)
+  IQR = Q3 - Q1
+  Q0 = Q1 - 1.5*IQR
+  Q4 = Q3 + 1.5*IQR
+  sum(x < Q0 | x > Q4, na.rm = TRUE)
+})
+
+total_out = data.frame(
+  Outlier_count = outlier_summary
+)
+
+total_out
+
+plot_ly(df, y = ~age, type = "box", name = "Age")%>%
+  layout(title = "Age Distribution")
+```
+In the **age** variable, several outliers are present, with the most extreme value is 91. However, this age is still within a reasonable human lifespan and does not warrant removal.
+<br><br>
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_ly(df, y = ~duration, type = "box", name = "Duration")%>%
+  layout(title = "Duration Distribution",
+         yaxis = list(title = "Contact duration in seconds"))
+```
+The **duration** variable shows several high outliers, with values significantly exceeding the upper quartile. The most extreme value is 3785 seconds (more than 1 hour), which is uncommon for a marketing call but still possible in rare cases of extended conversations.
+<br><br>
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_ly(df, y = ~campaign, type = "box", name = "Campaign")%>%
+  layout(title = "Campaign Distribution",
+         yaxis = list(title = "Number of contacts"))
+```
+The **campaign** variable also contains outliers, with some clients being contacted more than 30 times during a single campaign. The most extreme one is 56 times. Those high number of contacts are still make sense, but there's also possibility of data errors.
+<br><br>
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_ly(df, y = ~pdays, type = "box", name = "Pdays")%>%
+  layout(title = "Pdays Distribution",
+         yaxis = list(title = "Number of days"))
+```
+In the **pdays** variable, most values are 999. This value is not a real measurement of time, but rather a coded value that indicates the client was not previously contacted in a prior campaign.
+<br><br>
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_ly(df, y = ~previous, type = "box", name = "Previous")%>%
+  layout(title = "Previous Distribution",
+         yaxis = list(title = "Number of previous contacts"))
+```
+In the **previous** variable, the majority of records have a value of 0, meaning that most clients had no prior contact before the current campaign. As a result, values from 1 to 7 may appear as statistical outliers due to the heavily skewed distribution. However, these values are actually valid and meaningful, representing clients who were contacted a few times in past campaigns.
+<br><br>
+
+**e. Noisy or Irrelevant Values  **
+<br>
+We check if there are any values that doesn't make sense in numerical variable, for example negative value in age, duration, etc.
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Check noisy or irrelevant values
+out_num <- c(
+  "=== Age ===",
+  capture.output(names(table(df$age))),
+  "",
+  "=== Duration ===",
+  capture.output(names(table(df$duration))),
+  "",
+  "=== Campaign ===",
+  capture.output(names(table(df$campaign))),
+  "",
+  "=== Pdays ===",
+  capture.output(names(table(df$pdays))),
+  "",
+  "=== Previous ===",
+  capture.output(names(table(df$previous)))
+)
+
+cat(paste(out_num, collapse = "\n"))
+
+```
+All values in the selected variables are still considered meaningful and valid in the business context. However, in the case of the **pdays** variable, the value 999 does not represent an actual number of days since the last contact. Instead, it serves as a flag indicating that the client was not previously contacted in any past campaign. It is important to distinguish such values from irrelevant data to ensure correct interpretation and avoid data misrepresentation. <br>
+
+Additionally, the dataset includes a column named **X**, which functions as an index. Since it does not contribute to the analysis, it is treated as irrelevant and excluded. A blank space observed in the job variable is also considered noise, and appropriate handling is required.<br>
+
+Overall, the remaining values in both categorical and numerical variables are relevant for this analysis and are expected to provide valuable insights. <br><br>
+
+
+### B. Handling Data Problem
+First, we handle blank space in **job** variable by converting them into NA, allowing us to treat them as missing values.<br><br>
+Clean dataset:
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+df$job[df$job==""] = NA
+
+#handling missing values
+clean_data = df[!is.na(df$job) & !is.na(df$duration),]
+
+#drop column X
+clean_data = clean_data[,-c(1)]
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#remove dot "." after admin in job variable
+clean_data$job[clean_data$job == "admin."] = "admin"
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# categorize pdays in new variable
+clean_data = clean_data %>%
+  mutate(pdays_category = case_when(
+    pdays == 999 ~ "very_old",
+    pdays >= 0 & pdays <= 10 ~ "recent",
+    pdays > 10 & pdays < 999 ~ "old"
+  ))
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+#Convert string to factor
+clean_data = clean_data %>%
+  mutate_if(is.character, as.factor)
+
+clean_data$day_of_week = factor(clean_data$day_of_week, levels = c("mon", "tue", "wed", "thu", "fri"))
+clean_data$month = factor(clean_data$month, levels = c("mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"))
+
+head(clean_data)
+```
+
+
+From 8238 observations or records, there are 18 missing values, 9 in job and 9 in duration. Since these missing values account for only 0.218% of the dataset, I decided to drop the corresponding rows. The **X** column was also removed as it is irrelevant to the analysis. <br>
+
+In the job variable, one of the job titles appears as "admin.". To maintain consistency and improve clarity, the dot (".") was removed, changing it to "admin".<br>
+
+All variables with a character data type were converted into factors to facilitate easier analysis.<br>
+
+I did not remove or transform outliers in this analysis, as all observed values are still relevant and make sense in the business context. Although there are some uncommon values, such as a 3785-second duration for the last contact and 56 contacts made during the current campaign, these records may represent rare but valid client interactions. Rather than being treated as noise, such values could offer important insights into extreme behaviors or exceptional cases that may help refine future campaign strategies.<br>
+
+To handle the value 999 in pdays variable, I created a new categorical variable called **pdays_category**, which groups clients based on the recency of their last contact in a previous campaign:<br>
+  + very_old -> pdays = 999  
+  + recent -> pdays >= 0 & pdays <= 10  
+  + old -> pdays > 10 & pdays < 999 
+<br>
+
+### C. Summary Statistics and Initial Exploration
+**a. Central Tendency and Variability**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+num_col = clean_data[c("age", "duration", "campaign", "pdays", "previous")]
+
+summary(num_col)
+cat("\n")
+for (col in names(num_col)){
+  cat("Column", col, ":\n")
+  cat("Range:", range(clean_data[[col]]), "\n")
+  cat("IQR:", IQR(clean_data[[col]]), "\n")
+  cat("Variance:", var(clean_data[[col]]), "\n")
+  cat("Standard deviation:", sd(clean_data[[col]]), "\n\n")
+}
+```
+For pdays, the central tendency and variability are not actual number because there are 999 values that serve as flag. This variable already converted into variable "pdays_category". But, because in feature engineering we also need pdays to make "recency_level", so I didn't drop it yet.
+<br><br>
+**b. Summary table of age across job titles**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+sum_tab = aggregate(age ~ job, data = clean_data, FUN = mean)
+sum_tab
+```
+
+
+## Relationship Analysis 
+### A. Explore Variable Relationship
+**a. Poutcome and y (two categorical)**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+tbl = table(clean_data$poutcome, clean_data$y)
+
+cat("Cross Tabulation")
+tbl
+cat("Cross Tabulation in Percentage")
+prop.table(tbl)*100
+
+cat("Cross Tabulation in Percentage (Row wise)")
+prop.table(tbl, margin = 1)*100
+
+cat("Cross Tabulation in Percentage (Column wise)")
+prop.table(tbl, margin = 2)*100
+```
+From cross tabulation (in percentage), only around **11.81%** of all clients in the dataset subscribed to a term deposit. Among those who subscribed, **1.51%** had a previous campaign outcome of **"failure"**, **6.98%** had **no previous campaign contact or no clear outcome** (poutcome = "nonexistent"), and **2.32%** had a **successful** previous outcome.<br>
+
+Although the **nonexistent** category represents the largest share of subscribers, row wise cross tabulation shows that only **8.14%** of all clients in this group **actually subscribed**. In contrast, clients with a **success** outcome make up just 2.32% of all records, they show the highest conversion rate, with 65.41% of them subscribing. <br>
+
+From column wise cross tabulation, we can see the distribution of each poutcome category (failure, nonexistent, success) among those who subscribed. **Failure** has the smallest portion, while **nonexistent** is the largest at 64.57%. However, this large portion doesn't mean clients with **nonexistent** outcome from previous campaign are likely to subscribe. This is mainly because the dataset is dominated by clients who were never previously contacted or had no clear/recorded outcome. <br>
+
+In conclusion, clients with a **successful** previous interaction are **more likely to subscribe** again compared to those with failed or nonexistent outcome.
+<br><br>
+
+**b. Duration (numerical) and y (categorical)**<br>
+For correlation, categorical variable **y** is being converted to numerical variable using one hot encoding (yes = 1, no = 0). There are two kind of correlation test, *Pearson* correlation and *Spearman* correlation. We use Pearson correlation when our data is normally distributed and linear. On the other hand, we use Spearman correlation when our data is not normally distributed and relationship is not linear.
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+df_clean = clean_data
+df_clean$y_bin = ifelse(df_clean$y == "yes", 1, 0)
+
+cat("Check distribution for duration variable")
+ggplot(df_clean, aes(x = duration)) + geom_histogram()+
+  labs(title = "Duration Distribution")
+```
+<br>
+Because duration is not normally distributed, so we use *Spearman* correlation.<br>
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+cor(df_clean$duration, df_clean$y_bin, method = "spearman")
+```
+There's **weak** and **positive** correlation between duration and y_bin (campaign outcome in binary). But, correlation not really suitable to see the relationship between duration and campaign outcome (y). Other way is using grouped summaries or visualization. 
+<br><br>
+
+**Using Grouped Summaries and Visualization**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+dur_y = aggregate(duration ~ y, data = clean_data, mean)
+dur_y1 = aggregate(duration ~ y, data = clean_data, median)
+
+cat("Duration mean per Campaign Outcome (y):")
+dur_y
+cat("Duration median per Campaign Outcome (y):")
+dur_y1
+
+plot_ly(data = clean_data, x = ~y, y = ~duration, type = "box")%>%
+  layout(title = "Duration per Campaign Outcome (y)", 
+         x = list(title = "Campaign Outcome (y)"),
+         y = list(title = "Duration (second)"))
+```
+We can see that clients who eventually subscribe to a term deposit have higher duration average compare to those who didn't subscribe. But, because of many extreme values, mean doesn't really represent the data, so we focus more in median.<br>
+
+From boxplot we can see clearly the relation between duration and campaign outcome (y) where median of those who actually subscribe is higher than those who didn't. This suggests that longer conversations are associated with a higher likelihood of subscription. In other words, clients who spent more time speaking with the agent were more likely to be convinced and ended up subscribing to the term deposit. <br>
+
+However, there are still many clients with long durations in the no group who did not subscribe. These are visible as outliers in the "no" group with durations similar or even higher than those in the "yes" group. <br>
+
+For clients in "yes" category, longer durations likely reflect genuine interest or engangement. They stayed longer because they were considering the offer and asking questions. But, for "no" category, long duration may reflect hesitation, uncertainity, or ineffective persuassion.<br><br>
+
+**c. pdays_category and y (two category)**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+tbl1 = table(clean_data$pdays_category, clean_data$y)
+
+cat("Cross Tabulation")
+tbl1
+cat("\nCross Tabulation in Percentage")
+prop.table(tbl1)*100
+
+cat("\nCross Tabulation in Percentage (Row wise)")
+prop.table(tbl1, margin = 1)*100
+
+cat("\nCross Tabulation in Percentage (Column wise)")
+prop.table(tbl1, margin = 2)*100
+```
+In column wise cross tabulation, we observe that 76.27% of all clients who subscribed belong to "very_old" category which means not previously contacted (pdays = 999). However, this proportion doesn't mean that clients who were not previously contacted are more likely to subscribe. This is mainly due to a dataset imbalance, where most records have pdays = 999. <br>
+
+Therefore, we should focus on row wise cross tabulation. In this table we clearly see that only 8.59% from all clients in "very_old" category (not previously contact) subscribed in current campaign. In contrast, 65.12% of those contacted recently (within the last 10 days), ended up subscribing. For those contacted more than 10 days ago (old), the subscription rate was also realtively high at 57.14%. <br>
+
+This clearly indicates that clients that recently contacted in previous campaign (within last 10 days) are more likely to subscribe in the current one. Although clients contacted more than 10 days ago also show promising results, but their sample size is relatively small, so the impact is less significant compared to the recently contacted group.<br><br>
+
+**d. pdays_category, y, and duration**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+pdays_y = aggregate(duration ~ pdays_category + y, data = clean_data, median)
+pdays_y
+
+ggplot(clean_data, aes(x = pdays_category, y = duration, fill = y))+geom_boxplot()+
+  labs(title = "Duration per pdays_category and campaign outcome (y)")
+```
+
+In all categories (recent, old, very_old), clients who subscribed (y = yes) had a significantly longer median call duration than those who did not. The longest calls were observed in the "very_old" group (clients not contacted for a very long time), followed by the "old" group (contacted more than 10 days ago), and the shortest calls which around 4-5 minutes were in the "recent" group (contacted within the last 10 days). For clients who did not subscribe, the call duration typically lasted around 2 to 3 minutes.<br>
+
+Longer duration in "very_old" suggest that clients who haven't been contacted for a long time require more effort and time to persuade. Bank agent may need to invest longer conversations when reaching out to these clients in order to successfully convert them into term deposit subscribers in current campaign. This statement is supported by the boxplot where duration above 1500 seconds only belongs to "very_old" group.
+
+<br><br>
+
+**e. poutcome, y, and duration**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+poutcome_y = aggregate(duration ~ poutcome + y, data = clean_data, median)
+poutcome_y
+
+ggplot(clean_data, aes(x = poutcome, y = duration, fill = y))+geom_boxplot()+
+  labs(title = "Duration per poutcome and campaign outcome (y)")
+```
+<br>
+In all categories (failure, nonexistent, success), clients who subscribed (y = yes) had a significantly longer median call duration than those who did not. Clients who subscribe in previous campaign (poutcome = success) had the shortest duration (around 4-5 minutes), followed by clients with a previous failure outcomes (poutcome = failure), and the longest one are clients with no previous campaign contact or no clear outcome. According to the previous campagin outcome, for clients who did not subscribe, the call duration typically lasted around 2 to 3 minutes.<br>
+
+The longer call duration in the "nonexistent" group suggests that first-time clients or those with no clear outcome from previous contacts may require more time and effort to persuade.
+<br><br>
+
+### B. Feature Engineering
+**a. Adding age_group variable**
+<br><br>
+Dataset after adding age_group:
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+clean_data = clean_data %>%
+  mutate(age_group = case_when(
+    age < 30 ~ "<30",
+    age >= 30 & age <= 50 ~ "30-50",
+    age > 50 ~ ">50"
+  ))
+
+head(clean_data)
+```
+<br>
+**b. Adding recency_level variable  **<br>
+never -> pdays = 999  
+recent -> pdays >= 0 & pdays <= 10  
+old -> pdays > 10 & pdays < 999  
+<br>
+Dataset after adding recency_level:
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+clean_data = clean_data %>%
+  mutate(recency_level = case_when(
+    pdays == 999 ~ "never",
+    pdays >= 0 & pdays <= 10 ~ "recent",
+    pdays > 10 & pdays < 999 ~ "old"
+  ))
+
+# delete pdays_category because it's same with recency_level
+clean_data = clean_data[,-c(17)]
+
+head(clean_data)
+```
+<br>
+**c. Adding total_contact_score**
+<br><br>
+Dataset after adding total_contact_score:
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+clean_data = clean_data %>%
+  mutate(total_contact_score = campaign + previous)
+
+head(clean_data)
+```
+<br>
+
+### C. Interactive Visualization of Relationship
+**a. Recency level and Campaign Outcome[y] (two categorical variables)**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+recency_y <- clean_data %>%
+  group_by(recency_level, y) %>%
+  summarise(count = n()) %>%
+  mutate(
+    total = sum(count),
+    proportion = (count / total)*100
+  ) 
+
+recency_y$y = factor(recency_y$y, levels = c("yes", "no"))
+
+plot_ly(data = recency_y, y = ~recency_level, x = ~proportion, color = ~y, colors = c("no" = "#FF6B6B", "yes" = "#4ECDC4"), type = "bar") %>%
+  layout(title = "Campaign Outcome (y) Percentage in Every Recency Level",
+         barmode = "stack",
+         xaxis = list(title = "Percentage"),
+         yaxis = list(title = "Recency Level"))
+```
+<br>
+From the plot, we can observe that clients who were contacted recently (within the last 10 days of the previous campaign) show a strong tendency to subscribe again in the current campaign, with a subscription rate of approximately 65.12%. Clients in the "old" group (contacted more than 10 days ago) also demonstrate a relatively high interest, with a subscription rate of 57.14%. In contrast, only 8.59% of clients who were never contacted or had no previous contact expressed interest in subscribing during the current campaign.
+<br><br>
+
+**b. Duration and Poutcome (one numeric and one categorical variable)**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+plot_ly(data = clean_data, x = ~poutcome, y = ~duration, type = "box") %>%
+  layout(title = "Duration per Previous Campaign Outcome (poutcome)",
+         xaxis = list(title = "Previous Campaign Outcome (poutcome)"),
+         yaxis = list(title = "Duration"))
+```
+<br>
+From the boxplot, we can observe that clients with a "nonexistent" outcome from the previous campaign tend to have longer call durations during the current campaign compared to those with "failure" or "success" outcomes. Although the medians for all three groups are relatively close, the spread and number of extreme values (outliers) are much higher in the "nonexistent" group. This suggests that agents may spend more time on calls, possibly as an effort to engage or reintroduce the product to the clients with no previous campaign contact or no clear outcome.
+<br><br>
+
+**c. Job, Poutcome, and Campaign Outcome[y] (multi-dimensional)**
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+data_summary <- clean_data %>%
+  group_by(poutcome, job, y) %>%
+  summarise(count = n()) %>%
+  group_by(poutcome, job) %>%
+  mutate(
+    total = sum(count),
+    proportion = (count / total)*100
+  ) 
+
+data_summary$y = factor(data_summary$y, levels = c("yes", "no"))
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+# Plot for "failure"
+p1 <- data_summary %>%
+  filter(poutcome == "failure") %>%
+  plot_ly(
+    x = ~proportion, y = ~job, type = "bar", orientation = "h",
+    color = ~y, colors = c("no" = "#FF6B6B", "yes" = "#4ECDC4"),
+    showlegend = FALSE,
+    legendgroup = ~y
+  ) %>%
+  layout(
+    barmode = "stack",
+    xaxis = list(title = "Percentage"),
+    yaxis = list(title = "Job")
+  )
+
+# Plot for "nonexistent"
+p2 <- data_summary %>%
+  filter(poutcome == "nonexistent") %>%
+  plot_ly(
+    x = ~proportion, y = ~job, type = "bar", orientation = "h",
+    color = ~y, colors = c("no" = "#FF6B6B", "yes" = "#4ECDC4"),
+    showlegend = FALSE,
+    legendgroup = ~y
+  ) %>%
+  layout(
+    barmode = "stack",
+    xaxis = list(title = "Percentage"),
+    yaxis = list(title = "")
+  )
+
+# Plot for "success"
+p3 <- data_summary %>%
+  filter(poutcome == "success") %>%
+  plot_ly(
+    x = ~proportion, y = ~job, type = "bar", orientation = "h",
+    color = ~y, colors = c("no" = "#FF6B6B", "yes" = "#4ECDC4"),
+    showlegend = TRUE,
+    legendgroup = ~y
+  ) %>%
+  layout(
+    barmode = "stack",
+    xaxis = list(title = "Percentage"),
+    yaxis = list(title = "")
+  )
+
+# Combine 3 plot
+subplot(
+  p1, p2, p3,
+  nrows = 1,
+  shareY = TRUE,
+  titleX = TRUE,
+  titleY = TRUE
+) %>%
+  layout(
+    title = "Campaign Outcome (y) by Job and Previous Campaign Outcome",
+    margin = list(t = 100, b = 50, l = 100, r = 150),
+    annotations = list(
+      list(x = 0.1, y = 1.08, text = "Failure", showarrow = FALSE, xref = "paper", yref = "paper", font = list(size = 14)),
+      list(x = 0.5, y = 1.08, text = "Nonexistent", showarrow = FALSE, xref = "paper", yref = "paper", font = list(size = 14)),
+      list(x = 0.88, y = 1.08, text = "Success", showarrow = FALSE, xref = "paper", yref = "paper", font = list(size = 14))
+    ),
+    legend = list(
+       title = list(text = "Campaign Outcome(y)"),
+      orientation = "v"
+    )
+  )
+```
+From this visualization, we can clearly see that clients with a successful previous campaign outcome tend to subscribe again in the current campaign, regardless of their job type. This indicates a strong positive influence of prior successful interactions on subscription decisions.<br>
+
+When comparing across previous campaign outcome(failure, nonexistent, and success), we also notice that students and retired clients consistently show a higher proportion of subscriptions, regardless of the outcome of the previous campaign. This suggests that these groups may be more receptive to the current offer, even without a successful prior experience. <br>
+
+Additionally, for some job categories, such as services or blue-collar, we observe that clients are more likely to subscribe in the current campaign if they had a previous successful experience. This highlights how positive past interactions build trust and reduce hesitation, reinforcing the importance of a good client experience in earlier campaigns.
+
+
+## Insight Storytelling and Recommendations
+### <b>Past Success and Recent Engagement Boosts Subscriptions</b>
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+data_summary1 <- clean_data %>%
+  group_by(poutcome, job, y) %>%
+  summarise(count = n()) %>%
+  group_by(poutcome, job) %>%
+  mutate(
+    total = sum(count),
+    proportion = (count / total)*100
+  ) 
+
+data_summary1$y = factor(data_summary1$y, levels = c("yes", "no"))
+data_summary1$job = factor(data_summary1$job, levels = c("unknown", "unemployed", "technician", "student", "services", "self-employed", "retired", "management", "housemaid", "entrepreneur", "blue-collar", "admin"))
+
+y_labels = c("unknown", "unemployed", "technician", "**student", 
+             "services", "self-employed", "**retired", "management", 
+             "housemaid", "entrepreneur", "blue-collar", "admin")
+
+# Plot for "failure"
+p1 <- data_summary1 %>%
+  filter(poutcome == "failure") %>%
+  plot_ly(
+    x = ~proportion, y = ~job, type = "bar", orientation = "h",
+    color = ~y, colors = c("no" = "#FF6B6B", "yes" = "#4ECDC4"),
+    showlegend = FALSE,
+    legendgroup = ~y
+  ) %>%
+  layout(
+    barmode = "stack",
+    xaxis = list(title = "Percentage"),
+    yaxis = list(title = "Job", ticktext = y_labels, tickmode = "array", tickvals = levels(data_summary1$job))
+  )
+
+# Plot for "nonexistent"
+p2 <- data_summary1 %>%
+  filter(poutcome == "nonexistent") %>%
+  plot_ly(
+    x = ~proportion, y = ~job, type = "bar", orientation = "h",
+    color = ~y, colors = c("no" = "#FF6B6B", "yes" = "#4ECDC4"),
+    showlegend = FALSE,
+    legendgroup = ~y
+  ) %>%
+  layout(
+    barmode = "stack",
+    xaxis = list(title = "Percentage"),
+    yaxis = list(title = "", ticktext = y_labels, tickmode = "array", tickvals = levels(data_summary1$job))
+  )
+
+# Plot for "success"
+p3 <- data_summary1 %>%
+  filter(poutcome == "success") %>%
+  plot_ly(
+    x = ~proportion, y = ~job, type = "bar", orientation = "h",
+    color = ~y, colors = c("no" = "#FF6B6B", "yes" = "#4ECDC4"),
+    showlegend = TRUE,
+    legendgroup = ~y
+  ) %>%
+  layout(
+    barmode = "stack",
+    xaxis = list(title = "Percentage"),
+    yaxis = list(title = "", ticktext = y_labels, tickmode = "array", tickvals = levels(data_summary1$job))
+  )
+
+
+# Combine 3 plot
+subplot(
+  p1, p2, p3,
+  nrows = 1,
+  shareY = TRUE,
+  titleX = TRUE,
+  titleY = TRUE
+) %>%
+  layout(
+    title = "Campaign Outcome (y) by Job and Previous Campaign Outcome",
+    margin = list(t = 100, b = 60, l = 100, r = 150),
+    annotations = list(
+      list(x = 0.02, y = 1.12, text = "Failure\n(prev outcome)", showarrow = FALSE, xref = "paper", yref = "paper", font = list(size = 14)),
+      list(x = 0.5, y = 1.12, text = "Nonexistent\n(prev outcome)", showarrow = FALSE, xref = "paper", yref = "paper", font = list(size = 14)),
+      list(x = 0.97, y = 1.12, text = "Success\n(prev outcome)", showarrow = FALSE, xref = "paper", yref = "paper", font = list(size = 14))
+    ),
+    legend = list(
+       title = list(text = "Campaign\nOutcome(y)"),
+      orientation = "v"
+    )
+  )
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+recency_y <- clean_data %>%
+  group_by(recency_level, y) %>%
+  summarise(count = n()) %>%
+  mutate(
+    total = sum(count),
+    proportion = (count / total)*100
+  ) 
+
+recency_y$y = factor(recency_y$y, levels = c("yes", "no"))
+
+plot_ly(data = recency_y, y = ~recency_level, x = ~proportion, color = ~y, colors = c("no" = "#FF6B6B", "yes" = "#4ECDC4"), type = "bar") %>% 
+  layout(title = "Campaign Outcome (y) Percentage in Every Recency Level",
+         barmode = "stack",
+         xaxis = list(title = "Percentage"))
+```
+<br>
+Clients with a **successful** outcome in the **previous campaign** and those **contacted recently** show higher subscription rates, highlighting the importance of **engagement recency** and **past campaign effectiveness**. This also indicates a strong association between previous outcomes and recency level with current subscription behavior. Interestingly, **students** and **retired** clients tend to have relatively higher subscription rates even when their previous campaign outcome was failure or nonexistent, compared to other job categories under the same conditions. These groups appear to be inherently **more receptive**, making them promising targets regardless of past results. Overall, these trends suggest that targeting based on both recency and client profile can improve campaign effectiveness.<br><br>
+
+#### Recommendation:
+1. Prioritize clients with **successful past campaigns** and **recent engagement** (within the last 10 days since previous campaign).
+2. Include **students** and **retired** clients as key targets to expand outreach, as they tend to be more receptive even without prior positive campaign history.
